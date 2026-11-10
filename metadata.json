@@ -1,0 +1,6 @@
+{
+  "name": "QUICK SEND — Plataforma P2P de Câmbio de Moedas",
+  "description": "Marketplace profissional de câmbio de moedas peer-to-peer (EUR, AOA) com métodos de receção IBAN, MB WAY, Multicaixa Express, chat privado e painel Super Admin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

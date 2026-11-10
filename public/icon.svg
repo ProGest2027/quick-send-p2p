@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#101D35" />
+      <stop offset="100%" stop-color="#080F1E" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#246BFD" />
+      <stop offset="100%" stop-color="#00C48C" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background with squircle/rounded corners -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)" />
+
+  <!-- Outer subtle circular ring -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#246BFD" stroke-width="4" stroke-opacity="0.25" stroke-dasharray="12 12" />
+
+  <!-- Center Glow -->
+  <circle cx="256" cy="256" r="120" fill="#246BFD" fill-opacity="0.12" filter="url(#glow)" />
+
+  <!-- Lightning Arrow 1: Forward (Right) -->
+  <path d="M 160 210 L 320 210 L 270 150 M 320 210 L 270 270" fill="none" stroke="url(#accent)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Lightning Arrow 2: Backward (Left) -->
+  <path d="M 352 302 L 192 302 L 242 242 M 192 302 L 242 362" fill="none" stroke="#FFFFFF" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Quick Send Monogram / Lightning Core -->
+  <circle cx="256" cy="256" r="32" fill="url(#gold)" />
+  <path d="M 252 240 L 244 256 L 254 256 L 248 272 L 268 252 L 258 252 Z" fill="#101D35" />
+
+  <!-- Currency Indicators: EUR & AOA dots -->
+  <circle cx="160" cy="150" r="14" fill="#246BFD" />
+  <circle cx="352" cy="362" r="14" fill="#00C48C" />
+</svg>
