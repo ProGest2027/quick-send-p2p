@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, ExchangeRequest } from '../types';
 import { db } from '../services/database';
+import { CurrencyBadge, formatMoney, formatExchangeRate } from '../utils/currencyFormat';
 
 interface ExchangeRequestsPageProps {
   currentUser: UserProfile;
@@ -202,29 +203,35 @@ export const ExchangeRequestsPage: React.FC<ExchangeRequestsPageProps> = ({
                 {/* Details grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
                   <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Parceiro de Negociação</span>
+                    <span className="text-slate-400 text-[10px] block uppercase font-semibold">Parceiro de Negociação</span>
                     <span className="font-bold text-slate-900 dark:text-white text-sm">
                       {otherPartyName}
                     </span>
-                    <span className="text-slate-500 block text-[11px]">{otherPartyPhone}</span>
+                    <span className="text-slate-500 block text-[11px] font-mono">{otherPartyPhone}</span>
                   </div>
 
                   <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Quantia Solicitada</span>
-                    <span className="font-bold font-mono text-base text-slate-900 dark:text-white tabular-nums">
-                      {req.amount} {req.offerCurrency}
-                    </span>
-                    <span className="text-[11px] text-[#246BFD] font-mono">
-                      Taxa: 1 {req.offerCurrency} = {req.agreedRate} {req.receiveCurrency}
+                    <span className="text-slate-400 text-[10px] block uppercase font-semibold">Quantia Solicitada</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <CurrencyBadge currency={req.offerCurrency} size="sm" />
+                      <span className="font-black font-mono text-base text-slate-900 dark:text-white tabular-nums">
+                        {formatMoney(req.amount, req.offerCurrency)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-blue-600 dark:text-blue-400 font-mono block mt-0.5">
+                      {formatExchangeRate(req.agreedRate, req.offerCurrency, req.receiveCurrency)}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Total a Transferir</span>
-                    <span className="font-bold font-mono text-base text-slate-900 dark:text-white tabular-nums">
-                      {req.estimatedValue} {req.receiveCurrency}
-                    </span>
-                    <span className="text-slate-500 block text-[11px]">Método: {req.paymentMethod}</span>
+                    <span className="text-slate-400 text-[10px] block uppercase font-semibold">Total a Transferir</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <CurrencyBadge currency={req.receiveCurrency} size="sm" />
+                      <span className="font-black font-mono text-base text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {formatMoney(req.estimatedValue, req.receiveCurrency)}
+                      </span>
+                    </div>
+                    <span className="text-slate-500 block text-[11px] mt-0.5 font-medium">Método: {req.paymentMethod}</span>
                   </div>
 
                   <div className="flex flex-col justify-end items-start sm:items-end gap-2">

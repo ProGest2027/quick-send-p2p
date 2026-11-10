@@ -21,9 +21,12 @@ import {
   MapPin,
   CheckCircle2,
   Lock,
+  Landmark,
+  Coins,
 } from 'lucide-react';
 import { UserProfile, P2POffer, Currency, OfferType } from '../types';
 import { db } from '../services/database';
+import { CURRENCY_CONFIG, CurrencyBadge, formatMoney, formatExchangeRate } from '../utils/currencyFormat';
 
 interface MarketplacePageProps {
   currentUser: UserProfile | null;
@@ -318,92 +321,106 @@ export const MarketplacePage: React.FC<MarketplacePageProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredOffers.map((offer) => {
             const isOwner = currentUser?.id === offer.userId;
+            const estimatedReceive = offer.availableAmount * offer.proposedRate;
             return (
               <div
                 key={offer.id}
-                className="bg-white dark:bg-[#101D35] border border-slate-200 dark:border-slate-800 hover:border-[#246BFD] dark:hover:border-[#246BFD] rounded-2xl p-5 shadow-xs transition-all flex flex-col justify-between space-y-4"
+                className="bg-white dark:bg-[#0c162c] border border-slate-200/90 dark:border-slate-800 hover:border-blue-500/80 dark:hover:border-blue-500/80 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between space-y-4 group"
               >
-                {/* Header of card */}
+                {/* Header do cartão bancário */}
                 <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#246BFD] text-white flex items-center justify-center text-xs font-bold">
+                  <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center text-xs font-black shadow-xs">
                         {offer.userName.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <div className="font-extrabold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
                           <span>{offer.userName}</span>
-                          <span title="Membro Premium">
+                          <span title="Operador Verificado com Conta Premium">
                             <Crown className="w-3.5 h-3.5 text-amber-500" />
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1 font-medium">
+                          <MapPin className="w-3 h-3 text-slate-400" />
                           <span>{offer.country}</span>
                         </span>
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                        offer.type === 'SELL'
-                          ? 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300'
-                          : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300'
-                      }`}
-                    >
-                      {offer.type === 'SELL' ? 'A Vender' : 'A Comprar'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <CurrencyBadge currency={offer.offerCurrency} size="sm" />
+                      <span
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                          offer.type === 'SELL'
+                            ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                        }`}
+                      >
+                        {offer.type === 'SELL' ? 'Venda' : 'Compra'}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Amounts & Rates */}
-                  <div className="pt-3 space-y-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-500">Oferece:</span>
-                      <span className="text-lg font-black font-mono text-slate-900 dark:text-white tabular-nums">
-                        {offer.availableAmount.toLocaleString('pt-PT')} {offer.offerCurrency}
+                  {/* Detalhes de Montantes e Taxas com Símbolos Oficiais */}
+                  <div className="pt-3.5 space-y-2.5">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                        <span className="font-medium">Montante Disponível:</span>
+                        <span className="text-[10px] font-mono uppercase text-slate-400">Total</span>
+                      </div>
+                      <div className="text-xl font-black font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
+                        {formatMoney(offer.availableAmount, offer.offerCurrency)}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between border-t border-slate-200/40 dark:border-slate-800 pt-1.5">
+                        <span>Recebimento total:</span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatMoney(estimatedReceive, offer.receiveCurrency)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <span className="text-slate-500 font-medium">Câmbio Acordado:</span>
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                        {formatExchangeRate(offer.proposedRate, offer.offerCurrency, offer.receiveCurrency)}
                       </span>
                     </div>
 
-                    <div className="flex items-baseline justify-between text-xs">
-                      <span className="text-slate-500">Taxa Proposta:</span>
-                      <span className="font-mono font-bold text-[#246BFD] tabular-nums">
-                        1 {offer.offerCurrency} = {offer.proposedRate} {offer.receiveCurrency}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline justify-between text-xs">
-                      <span className="text-slate-500">Método Aceite:</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-medium">Canal de Liquidação:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">
                         {offer.paymentMethod}
                       </span>
                     </div>
 
                     {offer.terms && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg line-clamp-2 mt-2">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-lg line-clamp-2 italic">
                         "{offer.terms}"
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Footer of card */}
+                {/* Rodapé do Cartão */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                   <span className="text-[10px] text-slate-400 font-mono">
                     {new Date(offer.createdAt).toLocaleDateString('pt-PT')}
                   </span>
 
                   {isOwner ? (
-                    <span className="text-xs text-slate-400 italic font-medium">O seu anúncio</span>
+                    <span className="text-xs text-slate-400 italic font-semibold">O seu anúncio</span>
                   ) : (
                     <button
                       onClick={() => handleOpenRequest(offer)}
-                      className="px-4 py-2 bg-[#246BFD] hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
                     >
+                      <Landmark className="w-3.5 h-3.5" />
                       <span>Solicitar Câmbio</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <ArrowRight className="w-3 h-3" />
                     </button>
                   )}
                 </div>
@@ -663,25 +680,29 @@ export const MarketplacePage: React.FC<MarketplacePageProps> = ({
                   </div>
                 )}
 
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Taxa Acordada:</span>
-                    <span className="font-mono font-bold text-[#246BFD]">
-                      1 {selectedOfferForRequest.offerCurrency} = {selectedOfferForRequest.proposedRate}{' '}
-                      {selectedOfferForRequest.receiveCurrency}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Câmbio Aplicado:</span>
+                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                      {formatExchangeRate(
+                        selectedOfferForRequest.proposedRate,
+                        selectedOfferForRequest.offerCurrency,
+                        selectedOfferForRequest.receiveCurrency
+                      )}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-slate-500">Disponível no Anúncio:</span>
-                    <span className="font-mono font-bold">
-                      {selectedOfferForRequest.availableAmount} {selectedOfferForRequest.offerCurrency}
+                    <span className="font-mono font-black text-slate-900 dark:text-white">
+                      {formatMoney(selectedOfferForRequest.availableAmount, selectedOfferForRequest.offerCurrency)}
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Quantia a Solicitar ({selectedOfferForRequest.offerCurrency})
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Quantia a Solicitar ({CURRENCY_CONFIG[selectedOfferForRequest.offerCurrency]?.symbol}{' '}
+                    {selectedOfferForRequest.offerCurrency})
                   </label>
                   <input
                     type="number"
@@ -695,13 +716,13 @@ export const MarketplacePage: React.FC<MarketplacePageProps> = ({
                   />
                 </div>
 
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between text-xs">
-                  <span className="text-slate-600 dark:text-slate-300">Valor Estimado a Transferir:</span>
-                  <span className="font-mono font-black text-sm text-[#246BFD]">
-                    {(
-                      (parseFloat(requestAmount) || 0) * selectedOfferForRequest.proposedRate
-                    ).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}{' '}
-                    {selectedOfferForRequest.receiveCurrency}
+                <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">Valor Estimado a Transferir:</span>
+                  <span className="font-mono font-black text-base text-blue-600 dark:text-blue-400">
+                    {formatMoney(
+                      (parseFloat(requestAmount) || 0) * selectedOfferForRequest.proposedRate,
+                      selectedOfferForRequest.receiveCurrency
+                    )}
                   </span>
                 </div>
 
