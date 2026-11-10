@@ -1,13 +1,9 @@
--- ====================================================================
--- QUICK SEND — MASTER DATABASE MIGRATION & RLS POLICIES (SUPABASE)
--- Execute this script in your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/gdagbwbhjthcwbscfndi/sql
--- ====================================================================
+/* QUICK SEND — MASTER DATABASE SCHEMA & RLS POLICIES FOR SUPABASE */
 
--- 1. EXTENSIONS
+-- 1. EXTENSOES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. ENUMS
+-- 2. TIPOS ENUM
 DO $$ BEGIN
     CREATE TYPE user_role_enum AS ENUM ('SUPER_ADMIN', 'USER');
 EXCEPTION
@@ -44,7 +40,7 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- 3. PROFILES TABLE
+-- 3. TABELA DE PERFIS
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT NOT NULL UNIQUE,
@@ -62,7 +58,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     last_login_at TIMESTAMPTZ
 );
 
--- 4. AUDIT LOGS
+-- 4. TABELA DE AUDIT LOGS
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     action TEXT NOT NULL,
@@ -73,7 +69,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. ATOMIC FIRST USER IS SUPER_ADMIN TRIGGER
+-- 5. TRIGGER: PRIMEIRO USUARIO É SUPER_ADMIN AUTOMATICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_new_user_registration()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -125,7 +121,7 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_registration();
 
--- 6. CURRENCIES & EXCHANGE RATES
+-- 6. MOEDAS E TAXAS DE CAMBIO
 CREATE TABLE IF NOT EXISTS public.currencies (
     code VARCHAR(3) PRIMARY KEY,
     name TEXT NOT NULL,
@@ -165,7 +161,7 @@ CREATE TABLE IF NOT EXISTS public.rate_history (
     timestamp TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. PREMIUM PLANS & PAYMENTS
+-- 7. PAGAMENTOS PREMIUM E SUBSCRICOES (MB WAY: 936924849)
 CREATE TABLE IF NOT EXISTS public.premium_payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -193,7 +189,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. KYC VERIFICATIONS & DOCUMENTS
+-- 8. VERIFICACOES KYC
 CREATE TABLE IF NOT EXISTS public.kyc_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -210,7 +206,7 @@ CREATE TABLE IF NOT EXISTS public.kyc_submissions (
     reviewed_by UUID REFERENCES public.profiles(id)
 );
 
--- 9. P2P MARKETPLACE OFFERS
+-- 9. OFERTAS P2P NO MERCADO
 CREATE TABLE IF NOT EXISTS public.exchange_offers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -228,7 +224,7 @@ CREATE TABLE IF NOT EXISTS public.exchange_offers (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 10. EXCHANGE REQUESTS
+-- 10. SOLICITACOES DE CAMBIO
 CREATE TABLE IF NOT EXISTS public.exchange_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     offer_id UUID REFERENCES public.exchange_offers(id),
@@ -252,7 +248,7 @@ CREATE TABLE IF NOT EXISTS public.exchange_requests (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 11. CHAT
+-- 11. CHAT E MENSAGENS EM TEMPO REAL
 CREATE TABLE IF NOT EXISTS public.conversations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     request_id UUID REFERENCES public.exchange_requests(id) ON DELETE SET NULL,
@@ -276,7 +272,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 12. REPORTS (DENÚNCIAS)
+-- 12. DENUNCIAS E MODERACAO
 CREATE TABLE IF NOT EXISTS public.reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reporter_id UUID NOT NULL REFERENCES public.profiles(id),
@@ -293,7 +289,7 @@ CREATE TABLE IF NOT EXISTS public.reports (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 13. NOTIFICATIONS
+-- 13. NOTIFICACOES DO SISTEMA
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -305,8 +301,106 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 14. SEED INITIAL EXCHANGE RATES
+-- 14. VALORES INICIAIS DE CAMBIO
 INSERT INTO public.exchange_rates (pair, base_currency, target_currency, reference_rate, buy_rate, sell_rate) VALUES
 ('EUR/AOA', 'EUR', 'AOA', 989.50, 978.00, 1001.00),
 ('AOA/EUR', 'AOA', 'EUR', 0.00101, 0.00099, 0.00102)
 ON CONFLICT (pair) DO NOTHING;
+
+-- 15. SEGURANCA ROW LEVEL SECURITY (RLS)
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.premium_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kyc_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exchange_offers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exchange_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid() AND role = 'SUPER_ADMIN'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Politicas RLS (Drop and Recreate)
+DROP POLICY IF EXISTS "Public profiles are viewable by authenticated users" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by authenticated users"
+ON public.profiles FOR SELECT
+USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Users can update own profile except role" ON public.profiles;
+CREATE POLICY "Users can update own profile except role"
+ON public.profiles FOR UPDATE
+USING (auth.uid() = id AND NOT is_super_admin())
+WITH CHECK (role = (SELECT role FROM public.profiles WHERE id = auth.uid()));
+
+DROP POLICY IF EXISTS "Super Admins can manage all profiles" ON public.profiles;
+CREATE POLICY "Super Admins can manage all profiles"
+ON public.profiles FOR ALL
+USING (is_super_admin());
+
+DROP POLICY IF EXISTS "Offers viewable by authenticated users" ON public.exchange_offers;
+CREATE POLICY "Offers viewable by authenticated users"
+ON public.exchange_offers FOR SELECT
+USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Premium users with KYC can insert offers" ON public.exchange_offers;
+CREATE POLICY "Premium users with KYC can insert offers"
+ON public.exchange_offers FOR INSERT
+WITH CHECK (
+    auth.uid() = user_id AND (
+        is_super_admin() OR (
+            EXISTS (SELECT 1 FROM public.subscriptions WHERE user_id = auth.uid() AND status = 'APROVADO' AND expires_at > NOW()) AND
+            EXISTS (SELECT 1 FROM public.kyc_submissions WHERE user_id = auth.uid() AND status = 'APROVADO')
+        )
+    )
+);
+
+DROP POLICY IF EXISTS "Users can update own offers, admin can manage" ON public.exchange_offers;
+CREATE POLICY "Users can update own offers, admin can manage"
+ON public.exchange_offers FOR UPDATE
+USING (auth.uid() = user_id OR is_super_admin());
+
+DROP POLICY IF EXISTS "Requests viewable by participants or admin" ON public.exchange_requests;
+CREATE POLICY "Requests viewable by participants or admin"
+ON public.exchange_requests FOR SELECT
+USING (auth.uid() = buyer_id OR auth.uid() = seller_id OR is_super_admin());
+
+DROP POLICY IF EXISTS "Users can insert exchange requests" ON public.exchange_requests;
+CREATE POLICY "Users can insert exchange requests"
+ON public.exchange_requests FOR INSERT
+WITH CHECK (auth.uid() = buyer_id);
+
+DROP POLICY IF EXISTS "Participants or admin can update request" ON public.exchange_requests;
+CREATE POLICY "Participants or admin can update request"
+ON public.exchange_requests FOR UPDATE
+USING (auth.uid() = buyer_id OR auth.uid() = seller_id OR is_super_admin());
+
+DROP POLICY IF EXISTS "Messages viewable by participants or admin" ON public.messages;
+CREATE POLICY "Messages viewable by participants or admin"
+ON public.messages FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1 FROM public.conversation_participants
+        WHERE conversation_id = messages.conversation_id AND user_id = auth.uid()
+    ) OR is_super_admin()
+);
+
+DROP POLICY IF EXISTS "Participants can insert messages" ON public.messages;
+CREATE POLICY "Participants can insert messages"
+ON public.messages FOR INSERT
+WITH CHECK (
+    auth.uid() = sender_id AND
+    EXISTS (
+        SELECT 1 FROM public.conversation_participants
+        WHERE conversation_id = messages.conversation_id AND user_id = auth.uid()
+    )
+);
