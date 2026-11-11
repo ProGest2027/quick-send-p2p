@@ -7,6 +7,7 @@
 
 import {
   UserProfile,
+  UserRole,
   UserPaymentMethods,
   ExchangeRate,
   RateHistoryItem,
@@ -171,6 +172,21 @@ class DatabaseEngine {
     return user || session;
   }
 
+  public setActiveSession(user: UserProfile) {
+    const users = this.getUsers();
+    const existingIndex = users.findIndex(
+      (u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase()
+    );
+    if (existingIndex >= 0) {
+      users[existingIndex] = user;
+    } else {
+      users.push(user);
+    }
+    this.set(STORAGE_KEYS.USERS, users);
+    this.set(STORAGE_KEYS.SESSION, user);
+    this.notify();
+  }
+
   /**
    * Atomic Registration:
    * Rule 5 of Master Prompt + Reception payment methods:
@@ -181,7 +197,9 @@ class DatabaseEngine {
     email: string,
     phone: string,
     passwordHash: string,
-    paymentMethods?: UserPaymentMethods
+    paymentMethods?: UserPaymentMethods,
+    forcedId?: string,
+    forcedRole?: UserRole
   ): { success: boolean; user?: UserProfile; message?: string } {
     const cleanEmail = email.trim().toLowerCase();
     const users = this.getUsers();
@@ -191,11 +209,11 @@ class DatabaseEngine {
     }
 
     // Atomic assignment check: if no SUPER_ADMIN exists yet, this user is SUPER_ADMIN
-    const isFirstUser = !this.hasSuperAdmin();
-    const assignedRole = isFirstUser ? 'SUPER_ADMIN' : 'USER';
+    const isFirstUser = forcedRole ? forcedRole === 'SUPER_ADMIN' : !this.hasSuperAdmin();
+    const assignedRole = forcedRole || (isFirstUser ? 'SUPER_ADMIN' : 'USER');
 
     const newUser: UserProfile = {
-      id: 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      id: forcedId || 'usr_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       email: cleanEmail,
       fullName: fullName.trim(),
       phoneNumber: phone.trim(),

@@ -7,7 +7,8 @@
 import React, { useState } from 'react';
 import { X, ShieldAlert, CheckCircle2, Lock, Mail, User, Phone, ArrowRight, ShieldCheck } from 'lucide-react';
 import { db } from '../services/database';
-import { UserProfile } from '../types';
+import { supabaseManager } from '../services/supabaseClient';
+import { UserProfile, UserRole } from '../types';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
@@ -72,24 +73,96 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsSubmitting(true);
-    // Execute atomic registration with payment receiving coordinates
-    const res = db.registerUser(fullName, email, phone, password, {
-      ibanEur: ibanEur.trim() || undefined,
-      mbwayPhone: mbwayPhone.trim() || undefined,
-      ibanAoa: ibanAoa.trim() || undefined,
-      expressPhone: expressPhone.trim() || undefined,
-    });
-    setIsSubmitting(false);
 
-    if (res.success && res.user) {
-      onSuccess(res.user);
-      onClose();
-    } else {
-      setErrorMessage(res.message || 'Erro ao criar conta.');
+    try {
+      const supabase = supabaseManager.getClient();
+      let supabaseUserId: string | null = null;
+      let assignedRole: UserRole = 'USER';
+
+      if (supabase) {
+        // 1. Verificar contagem de perfis para garantir atribuição de SUPER_ADMIN ao primeiro utilizador
+        try {
+          const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+          if (count === 0 || count === null) {
+            assignedRole = 'SUPER_ADMIN';
+          }
+        } catch {
+          if (!db.hasSuperAdmin()) assignedRole = 'SUPER_ADMIN';
+        }
+
+        // 2. Registar utilizador no Supabase Auth
+        const cleanEmail = email.trim().toLowerCase();
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              phone_number: phone.trim(),
+              iban_eur: ibanEur.trim() || null,
+              mbway_phone: mbwayPhone.trim() || null,
+              iban_aoa: ibanAoa.trim() || null,
+              express_phone: expressPhone.trim() || null,
+              role: assignedRole,
+            },
+          },
+        });
+
+        if (authErr) {
+          console.warn('Aviso no registo Supabase Auth:', authErr.message);
+        } else if (authData?.user?.id) {
+          supabaseUserId = authData.user.id;
+
+          // 3. Persistir diretamente na tabela public.profiles
+          const { error: profileErr } = await supabase.from('profiles').upsert({
+            id: authData.user.id,
+            email: cleanEmail,
+            full_name: fullName.trim(),
+            phone_number: phone.trim(),
+            iban_eur: ibanEur.trim() || null,
+            mbway_phone: mbwayPhone.trim() || null,
+            iban_aoa: ibanAoa.trim() || null,
+            express_phone: expressPhone.trim() || null,
+            role: assignedRole,
+          });
+
+          if (profileErr) {
+            console.warn('Aviso ao sincronizar profiles no Supabase:', profileErr.message);
+          }
+        }
+      }
+
+      // 4. Sincronizar na sessão local
+      const res = db.registerUser(
+        fullName,
+        email,
+        phone,
+        password,
+        {
+          ibanEur: ibanEur.trim() || undefined,
+          mbwayPhone: mbwayPhone.trim() || undefined,
+          ibanAoa: ibanAoa.trim() || undefined,
+          expressPhone: expressPhone.trim() || undefined,
+        },
+        supabaseUserId || undefined,
+        assignedRole
+      );
+
+      setIsSubmitting(false);
+
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        onClose();
+      } else {
+        setErrorMessage(res.message || 'Erro ao criar conta.');
+      }
+    } catch (err) {
+      setIsSubmitting(false);
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao registar conta.');
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
@@ -100,14 +173,71 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     setIsSubmitting(true);
-    const res = db.loginUser(email, password);
-    setIsSubmitting(false);
 
-    if (res.success && res.user) {
-      onSuccess(res.user);
-      onClose();
-    } else {
-      setErrorMessage(res.message || 'Credenciais inválidas.');
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const supabase = supabaseManager.getClient();
+
+      // 1. Tentar login no Supabase Auth caso esteja configurado
+      if (supabase) {
+        const { data: authData } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password,
+        });
+
+        if (authData?.user) {
+          // Carregar perfil direto do Supabase
+          const { data: profData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .maybeSingle();
+
+          if (profData) {
+            const syncedUser: UserProfile = {
+              id: profData.id,
+              email: profData.email,
+              fullName: profData.full_name,
+              phoneNumber: profData.phone_number,
+              role: profData.role,
+              isBlocked: profData.is_blocked || false,
+              isSuspended: profData.is_suspended || false,
+              paymentMethods: {
+                ibanEur: profData.iban_eur || undefined,
+                mbwayPhone: profData.mbway_phone || undefined,
+                ibanAoa: profData.iban_aoa || undefined,
+                expressPhone: profData.express_phone || undefined,
+              },
+              createdAt: profData.created_at,
+            };
+            db.setActiveSession(syncedUser);
+            setIsSubmitting(false);
+            onSuccess(syncedUser);
+            onClose();
+            return;
+          }
+        }
+      }
+
+      // 2. Fallback para verificação local caso offline
+      const res = db.loginUser(email, password);
+      setIsSubmitting(false);
+
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        onClose();
+      } else {
+        setErrorMessage(res.message || 'Credenciais inválidas.');
+      }
+    } catch {
+      const res = db.loginUser(email, password);
+      setIsSubmitting(false);
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        onClose();
+      } else {
+        setErrorMessage('Credenciais inválidas.');
+      }
     }
   };
 

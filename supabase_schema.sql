@@ -71,13 +71,15 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 
 -- 5. TRIGGER: PRIMEIRO USUARIO É SUPER_ADMIN AUTOMATICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_new_user_registration()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
 DECLARE
     user_count INT;
-    assigned_role user_role_enum;
+    assigned_role public.user_role_enum;
 BEGIN
-    PERFORM pg_advisory_xact_lock(99283741);
-    
     SELECT COUNT(*) INTO user_count FROM public.profiles;
     
     IF user_count = 0 THEN
@@ -93,7 +95,7 @@ BEGIN
     )
     VALUES (
         NEW.id,
-        NEW.email,
+        COALESCE(NEW.email, ''),
         COALESCE(NEW.raw_user_meta_data->>'full_name', 'Utilizador'),
         COALESCE(NEW.raw_user_meta_data->>'phone_number', ''),
         NEW.raw_user_meta_data->>'iban_eur',
@@ -101,20 +103,17 @@ BEGIN
         NEW.raw_user_meta_data->>'iban_aoa',
         NEW.raw_user_meta_data->>'express_phone',
         assigned_role
-    );
-
-    INSERT INTO public.audit_logs (action, details, performed_by, user_email, category)
-    VALUES (
-        'USER_REGISTERED',
-        'Novo registo atribuído com a função: ' || assigned_role::TEXT,
-        NEW.id,
-        NEW.email,
-        'AUTH'
-    );
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        full_name = EXCLUDED.full_name;
 
     RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Erro ao criar perfil no Supabase: %', SQLERRM;
+    RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
